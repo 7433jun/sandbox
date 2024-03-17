@@ -1,37 +1,58 @@
 ﻿using System;
-using System.Collections;
-using System.Text;
 
 namespace Test
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static void Main()
         {
             int N = int.Parse(Console.ReadLine());
-            int[] A = Array.ConvertAll(Console.ReadLine().Split(), int.Parse);
-            int M = int.Parse(Console.ReadLine());
-            int[] B = Array.ConvertAll(Console.ReadLine().Split(), int.Parse);
+            int[] ints = new int[N];
+
+            for (int i = 0; i < N; i++)
+            {
+                ints[i] = int.Parse(Console.ReadLine());
+            }
+
+            double avg = Math.Round((double)ints.Sum() / (double)ints.Count());
 
             
-            List<int> listA = A.ToList();
-            listA.Sort();
 
-            StringBuilder stringBuilder = new StringBuilder();
+            Console.WriteLine((int)avg);
 
-            foreach (int num in B)
+            Array.Sort(ints);
+
+            Console.WriteLine(ints[ints.Count() / 2]);
+
+            int[] nums = new int[8001];
+
+            for (int i = 0; i < ints.Count(); i++)
             {
-                if (listA.BinarySearch(num) < 0)
+                nums[ints[i] + 4000]++;
+            }
+
+            int max = nums.Max();
+
+            List<int> list = new List<int>();
+
+            for (int i = 0; i < nums.Count(); i++)
+            {
+                if (max == nums[i])
                 {
-                    stringBuilder.Append("0\n");
-                }
-                else
-                {
-                    stringBuilder.Append("1\n");
+                    list.Add(i - 4000);
                 }
             }
 
-            Console.WriteLine(stringBuilder);
+            if (list.Count() == 1)
+            {
+                Console.WriteLine(list[0]);
+            }
+            else
+            {
+                Console.WriteLine(list[1]);
+            }
+
+            Console.WriteLine(ints[ints.Count() - 1] - ints[0]);
         }
     }
 }
