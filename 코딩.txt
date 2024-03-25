@@ -14,3 +14,8 @@ Math랑 MathF랑 차이가 Math는 double형에 맞춰진 함수이고 MathF는 
 
 
 코딩테스트 사이트에서는 유효범위때문에 소수 필요하면 double을 우선으로 쓰자
+
+
+struct와 class의 차이
+c++ : struct의 기본 접근제한자는 public, class의 기본 접근제한자는 private
+c# : struct상속불가능, class 상속가능 struct 값타입, class 참조타입
