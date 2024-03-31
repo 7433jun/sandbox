@@ -6,53 +6,46 @@ namespace Test
     {
         public static void Main()
         {
-            int N = int.Parse(Console.ReadLine());
-            int[] ints = new int[N];
+            string[] s = Console.ReadLine().Split();
+            int a = int.Parse(s[0]);
+            int b = int.Parse(s[1]);
 
-            for (int i = 0; i < N; i++)
+            // greatest common divisor / least common multiple
+            int gcd;
+            int lcm;
+
+            int t1 = a, t2 = b;
+
+            if (a > b)
             {
-                ints[i] = int.Parse(Console.ReadLine());
-            }
-
-            double avg = Math.Round((double)ints.Sum() / (double)ints.Count());
-
-            
-
-            Console.WriteLine((int)avg);
-
-            Array.Sort(ints);
-
-            Console.WriteLine(ints[ints.Count() / 2]);
-
-            int[] nums = new int[8001];
-
-            for (int i = 0; i < ints.Count(); i++)
-            {
-                nums[ints[i] + 4000]++;
-            }
-
-            int max = nums.Max();
-
-            List<int> list = new List<int>();
-
-            for (int i = 0; i < nums.Count(); i++)
-            {
-                if (max == nums[i])
-                {
-                    list.Add(i - 4000);
-                }
-            }
-
-            if (list.Count() == 1)
-            {
-                Console.WriteLine(list[0]);
+                t1 = a;
+                t2 = b;
             }
             else
             {
-                Console.WriteLine(list[1]);
+                t1 = b;
+                t2 = a;
             }
 
-            Console.WriteLine(ints[ints.Count() - 1] - ints[0]);
+            while (true)
+            {
+                if (t1 % t2 == 0)
+                {
+                    gcd = t2;
+                    break;
+                }
+                else
+                {
+                    int t = t1;
+                    t1 = t2;
+                    t2 = t % t2;
+                }
+            }
+
+            lcm = a * b / gcd;
+
+            Console.WriteLine(gcd);
+            Console.WriteLine(lcm);
         }
     }
 }
