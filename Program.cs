@@ -4,8 +4,10 @@ namespace Test
 {
     public class Program
     {
-        public static void Main()
+
+        static void Print<T>(params T[] args)
         {
+<<<<<<< HEAD
             string[] s = Console.ReadLine().Split();
             int a = int.Parse(s[0]);
             int b = int.Parse(s[1]);
@@ -46,6 +48,18 @@ namespace Test
 
             Console.WriteLine(gcd);
             Console.WriteLine(lcm);
+=======
+            foreach(var e in args)
+            {
+                Console.WriteLine(e);
+            }
+        }
+
+        static void Main(string[] args)
+        {
+            Program program = new Program();
+            Program.Print(1, 'a', 3.14);
+>>>>>>> 5b97f0bba2c843aac84ed193bb431f14aef8298f
         }
     }
 }
