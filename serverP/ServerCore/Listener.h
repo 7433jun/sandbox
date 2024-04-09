@@ -1,11 +1,14 @@
 #pragma once
-#include "CorePch.h"
+//#include "CorePch.h"
 
 class Listener
 {
 private:
 	SOCKET socket = INVALID_SOCKET;
 	HANDLE iocpHandle = NULL;
+	LPFN_ACCEPTEX lpfnAcceptEx = NULL;
+	GUID guidAcceptEx = WSAID_ACCEPTEX;
+
 public:
 	Listener();
 	~Listener();

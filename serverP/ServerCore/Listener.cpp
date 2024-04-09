@@ -18,6 +18,18 @@ bool Listener::StartAccept(Service& service)
 	if (socket == INVALID_SOCKET)
 		return false;
 
+	// 家南 SO_REUSEADDR 可记 眠啊
+	bool enable = true;
+	if (setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, (char*)&enable, sizeof(enable)) == SOCKET_ERROR)
+		return false;
+
+	// 家南 LINGER 可记 眠啊
+	LINGER linger;
+	linger.l_onoff = 0;
+	linger.l_linger = 0;
+	if (setsockopt(socket, SOL_SOCKET, SO_LINGER, (char*)&linger, sizeof(linger)) == SOCKET_ERROR)
+		return false;
+
 	if (bind(socket, (SOCKADDR*)&service.GetSockAddr(), sizeof(service.GetSockAddr())) == SOCKET_ERROR)
 		return false;
 
@@ -27,8 +39,7 @@ bool Listener::StartAccept(Service& service)
 	printf("listening...\n");
 
 	DWORD dwBytes;
-	LPFN_ACCEPTEX lpfnAcceptEx = NULL;
-	GUID guidAcceptEx = WSAID_ACCEPTEX;
+
 
 	if (WSAIoctl(socket, SIO_GET_EXTENSION_FUNCTION_POINTER, &guidAcceptEx, sizeof(guidAcceptEx),
 		&lpfnAcceptEx, sizeof(lpfnAcceptEx), &dwBytes, NULL, NULL) == SOCKET_ERROR)
