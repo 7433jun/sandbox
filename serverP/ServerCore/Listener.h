@@ -5,17 +5,15 @@ class Listener
 {
 private:
 	SOCKET socket = INVALID_SOCKET;
-	HANDLE iocpHandle = NULL;
-	LPFN_ACCEPTEX lpfnAcceptEx = NULL;
-	GUID guidAcceptEx = WSAID_ACCEPTEX;
 
 public:
-	Listener();
+	Listener() = default;
 	~Listener();
 public:
-	HANDLE GetHandle() const { return iocpHandle; }
-public:
-	bool StartAccept(class Service& service);
+	bool StartAccept(class Service* service);
+
+	void RegisterAccept(class IocpEvent* acceptEvent);
+
 	void CloseSocket();
 };
 

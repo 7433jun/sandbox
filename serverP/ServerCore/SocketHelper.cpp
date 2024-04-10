@@ -1,12 +1,20 @@
 #include "pch.h"
 #include "SocketHelper.h"
 
+LPFN_ACCEPTEX SocketHelper::AcceptEx = nullptr;
+
 bool SocketHelper::StartUp()
 {
 	WSAData wsaData;
+	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
+		return false;
 
-	// 에러나면 false
-	return WSAStartup(MAKEWORD(2, 2), &wsaData) == 0;
+	SOCKET tempSocket = CreateSocket();
+	// Client는 Accept가 없는데 어디서 초기화 할지
+	// AcceptEx 함수 포인터의 주소를 얻기 위해
+	SetIoControl(tempSocket, WSAID_ACCEPTEX, (LPVOID*)&AcceptEx);
+
+	CloseSocket(tempSocket);
 }
 
 bool SocketHelper::CleanUp()
