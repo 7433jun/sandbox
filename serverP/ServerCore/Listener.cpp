@@ -1,6 +1,6 @@
 #include "pch.h"
 #include "Listener.h"
-#include "Service.h"
+#include "ServerService.h"
 #include "SocketHelper.h"
 #include "IocpCore.h"
 #include "Session.h"
@@ -11,8 +11,10 @@ Listener::~Listener()
 	CloseSocket();
 }
 
-bool Listener::StartAccept(Service* service)
+bool Listener::StartAccept(ServerService* service)
 {
+	serverService = service;
+
 	socket = SocketHelper::CreateSocket();
 	if (socket == INVALID_SOCKET)
 		return false;
@@ -24,7 +26,7 @@ bool Listener::StartAccept(Service* service)
 		return false;
 
 	ULONG_PTR key = 0;
-	service->GetIocpCore()->Register((HANDLE)socket, key);
+	service->GetIocpCore()->Register(this);
 
 
 	if (!SocketHelper::Bind(socket, service->GetSockAddr()))
@@ -36,23 +38,57 @@ bool Listener::StartAccept(Service* service)
 
 	printf("listening...\n");
 
-	
+	AcceptEvent* acceptEvent = new AcceptEvent();
+	acceptEvent->iocpObj = this;
+	RegisterAccept(acceptEvent);
 
 	return true;
 }
 
-void Listener::RegisterAccept(IocpEvent* acceptEvent)
+void Listener::RegisterAccept(AcceptEvent* acceptEvent)
 {
-	Session* session = new Session;
+	Session* session = serverService->CreateSession();
+	// session¿¡ serverService µî·Ï
+	session->SetService(serverService);
 	acceptEvent->Init();
+	acceptEvent->session = session;
 
 	DWORD dwBytes = 0;
-
 	if (!SocketHelper::AcceptEx(socket, session->GetSocket(), session->recvBuffer, 0, sizeof(SOCKADDR) + 16, sizeof(SOCKADDR) + 16, &dwBytes, (LPOVERLAPPED)acceptEvent))
 	{
 		if (WSAGetLastError() != ERROR_IO_PENDING)
 			RegisterAccept(acceptEvent);
 	}
+}
+
+void Listener::ObserveIO(IocpEvent* iocpEvent, DWORD bytesTransferred)
+{
+	ProcessAccept((AcceptEvent*)iocpEvent);
+}
+
+void Listener::ProcessAccept(AcceptEvent* acceptEvent)
+{
+	Session* session = acceptEvent->session;
+	if (!SocketHelper::SetUpdateAcceptSocket(session->GetSocket(), socket))
+	{
+		printf("SetUpdateAcceptSocket Error\n");
+		RegisterAccept(acceptEvent);
+		return;
+	}
+
+	SOCKADDR_IN sockAddr;
+	int sockAddrSize = sizeof(sockAddr);
+	if (getpeername(session->GetSocket(), (SOCKADDR*)&sockAddr, &sockAddrSize) == SOCKET_ERROR)
+	{
+		printf("getpeername Error\n");
+		RegisterAccept(acceptEvent);
+		return;
+	}
+
+	session->SetSockAddr(sockAddr);
+	session->ProcessConnect();
+
+	RegisterAccept(acceptEvent);
 }
 
 void Listener::CloseSocket()

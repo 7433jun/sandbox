@@ -2,11 +2,12 @@
 #include "Service.h"
 #include "SocketHelper.h"
 #include "IocpCore.h"
-#include "Listener.h"
+#include "Session.h"
 
-Service::Service(wstring ip, uint16 port)
+Service::Service(ServiceType type, wstring ip, uint16 port, SessionFactory factory) : serviceType(type), sessionFactory(factory)
 {
-	SocketHelper::StartUp();
+	if (!SocketHelper::StartUp())
+		return;
 
 	memset(&sockAddr, 0, sizeof(sockAddr));
 	sockAddr.sin_family = AF_INET;
@@ -29,10 +30,30 @@ Service::~Service()
 	}
 }
 
-bool Service::Start()
+Session* Service::CreateSession()
 {
-	listener = new Listener;
-	return listener->StartAccept(this);
+	// session 만들어 주고
+	Session* session = sessionFactory();
+
+	// false이면 nullptr
+	if (!iocpCore->Register(session))
+		return nullptr;
+
+	return session;
+}
+
+void Service::AddSession(Session* session)
+{
+	unique_lock<shared_mutex> lock(rwLock);
+	sessionCount++;
+	sessions.insert(session);
+}
+
+void Service::RemoveSession(Session* session)
+{
+	unique_lock<shared_mutex> lock(rwLock);
+	sessions.erase(session);
+	sessionCount--;
 }
 
 bool Service::ObserveIO(DWORD time)

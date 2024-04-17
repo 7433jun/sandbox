@@ -1,63 +1,66 @@
 ﻿#include <iostream>
-#include <thread>
 using namespace std;
 
-#pragma comment(lib, "Ws2_32.lib")
-#include <WinSock2.h>
-#include <WS2tcpip.h>
-#include <MSWSock.h>
+#pragma comment(lib, "Ws2_32.lib")	
+#include <WinSock2.h>	
+#include <WS2tcpip.h> 
 
-// IOCP 타입
-enum IOCP_TYPE
+#include <thread>
+
+struct Session
 {
-	NONE,
-	CONNECT,
-	DISCONNECT,
+	WSAOVERLAPPED overlapped = {};		// 비동기 I/O 작업을 위한 구조체
+	SOCKET socket = INVALID_SOCKET;		// 클라이언트와의 통신을 담당하는 소켓
+	char sendBuffer[512] = {};			// 데이터 송신을 위한 버퍼
 };
 
-// IocpEvent를 만들어서 IOCP_TYPE을 추가
-struct IocpEvent
-{
-	WSAOVERLAPPED overlapped = {};
-	IOCP_TYPE type = NONE;
-}; // [WSAOVERLAPPED...   ][IOCP_TYPE...]
-
-// 비동기 연결 완료를 대기하고 결과를 처리하는 스레드 함수
-void ConnectThread(HANDLE iocpHandle)
+void SendThread(HANDLE iocpHandle)
 {
 	DWORD bytesTransferred = 0;
 	ULONG_PTR key = 0;
-	IocpEvent* iocpEvent = nullptr;
+	Session* session = nullptr;
 
 	while (true)
 	{
-		printf("Waiting...\n");
-
-		if (GetQueuedCompletionStatus(iocpHandle, &bytesTransferred, &key, (LPOVERLAPPED*)&iocpEvent, INFINITE))
+		printf("Waiting...");
+		//보낼 준비가 된다면
+		if (GetQueuedCompletionStatus(iocpHandle, &bytesTransferred, &key, (LPOVERLAPPED*)&session, INFINITE))
 		{
-			switch (iocpEvent->type)
+			WSABUF wsaBuf;
+			wsaBuf.buf = session->sendBuffer;			// 송신 버퍼 지정
+			wsaBuf.len = sizeof(session->sendBuffer); 	// 버퍼의 크기 지정
+
+			DWORD sendLen = 0;	// 송신 데이터 길이를 저장할 변수
+			DWORD flags = 0;	// flag, 현재 사용하지 않음
+
+			printf("session->sendBuffer : %s", session->sendBuffer);
+
+			//비동기로 보냄
+			if (WSASend(session->socket, &wsaBuf, 1, &sendLen, flags, &session->overlapped, NULL) == SOCKET_ERROR)
 			{
-			case CONNECT:
-				printf("Client Connect\n");
-				break;
-			case DISCONNECT:
-				printf("Client Disconnect\n");
-				break;
-			default:
-				break;
+				//연결 실패시 오류 메세지 출력
+				printf("send failed with error %d", WSAGetLastError());
+				return;
 			}
+
+			printf("Send...\n");
+
 		}
+
+		//1초에 한번씩 작동
+		this_thread::sleep_for(1s);
 	}
 }
 
 int main()
 {
+	//1초 늦게 시작
 	this_thread::sleep_for(1s);
 
 	printf("==== CLIENT ====\n");
 
 	WORD wVersionRequested;
-	WSADATA wsaData;
+	WSAData wsaData;
 
 	wVersionRequested = MAKEWORD(2, 2);
 
@@ -67,7 +70,7 @@ int main()
 		return 1;
 	}
 
-	SOCKET connectSocket = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_OVERLAPPED);
+	SOCKET connectSocket = socket(AF_INET, SOCK_STREAM, 0);
 	if (connectSocket == INVALID_SOCKET)
 	{
 		printf("socket function failed with error : %d\n", WSAGetLastError());
@@ -75,103 +78,55 @@ int main()
 		return 1;
 	}
 
-	// ConnectEx 함수포인터 로드
-	DWORD dwBytes;
-	LPFN_CONNECTEX lpfnConnectEx = nullptr;
-	GUID guidConnectEx = WSAID_CONNECTEX;
-	if (WSAIoctl(connectSocket, SIO_GET_EXTENSION_FUNCTION_POINTER, &guidConnectEx, sizeof(guidConnectEx),
-		&lpfnConnectEx, sizeof(lpfnConnectEx), &dwBytes, NULL, NULL) == SOCKET_ERROR)
+
+	SOCKADDR_IN service;
+	memset(&service, 0, sizeof(service));
+	service.sin_family = AF_INET;
+	inet_pton(AF_INET, "127.0.0.1", &service.sin_addr);
+	service.sin_port = htons(27015);
+
+	if (connect(connectSocket, (SOCKADDR*)&service, sizeof(service)) == SOCKET_ERROR)
 	{
-		printf("WSAIoctl failed with error : %d\n", WSAGetLastError());
+
+		printf("connect function failed with error : %d\n", WSAGetLastError());
 		closesocket(connectSocket);
 		WSACleanup();
 		return 1;
+
 	}
 
-	// DisconnectEx 함수포인터 로드
-	LPFN_DISCONNECTEX lpfnDisconnectEx = nullptr;
-	GUID guidDisconnectEx = WSAID_DISCONNECTEX;
-	if (WSAIoctl(connectSocket, SIO_GET_EXTENSION_FUNCTION_POINTER, &guidDisconnectEx, sizeof(guidDisconnectEx),
-		&lpfnDisconnectEx, sizeof(lpfnDisconnectEx), &dwBytes, NULL, NULL) == SOCKET_ERROR)
-	{
-		printf("WSAIoctl failed with error : %d\n", WSAGetLastError());
-		closesocket(connectSocket);
-		WSACleanup();
-		return 1;
-	}
+	//서버와 연결 성공
+	printf("Connected\n");
 
-	// 서버의 주소
-	SOCKADDR_IN serverService;
-	memset(&serverService, 0, sizeof(serverService));
-	serverService.sin_family = AF_INET;
-	inet_pton(AF_INET, "127.0.0.1", &serverService.sin_addr);
-	serverService.sin_port = htons(27015);
-
-	// 클라이언트의 로컬 주소
-	SOCKADDR_IN clientService;
-	memset(&clientService, 0, sizeof(clientService));
-	clientService.sin_family = AF_INET;
-	clientService.sin_addr.s_addr = htonl(INADDR_ANY); // 임의의 내 주소
-	clientService.sin_port = htons(0); // 임의의 포트 설정
-
-	// 클라이언트 로컬 주소 connectSocket과의 바인딩 == 서버와 유사
-	if (bind(connectSocket, (SOCKADDR*)&clientService, sizeof(clientService)) == SOCKET_ERROR)
-	{
-		printf("bind failed with error : %d\n", WSAGetLastError());
-		closesocket(connectSocket);
-		WSACleanup();
-		return 1;
-	}
-
-	// IOCP 핸들 생성
 	HANDLE iocpHandle = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, NULL, NULL);
-	// 키 설정
+	thread t(SendThread, iocpHandle);
+
 	ULONG_PTR key = 0;
-	// connectSocket을 iocpHandle이랑 연결
+
+	//connectSocket을 iocpHandle이랑 연결
 	CreateIoCompletionPort((HANDLE)connectSocket, iocpHandle, key, 0);
 
-	thread t(ConnectThread, iocpHandle);
+	Session* session = new Session;
+	session->socket = connectSocket;
+	char sendBuffer[512] = "Hello thils is Client"; // 전송할 메세지 설정
 
+	//session->sendBuffer에 보내고 싶은 자료 복사
+	//memcpy(담을곳, 복사할 시작주소, 복사할 크기)
+	memcpy(session->sendBuffer, sendBuffer, sizeof(sendBuffer));
 
-	DWORD bytesTransferred = 0;
-	IocpEvent* connectEvent = new IocpEvent;
-	connectEvent->type = CONNECT;
+	WSABUF wsaBuf;
+	wsaBuf.buf = session->sendBuffer;
+	wsaBuf.len = sizeof(session->sendBuffer);
 
-	if (!lpfnConnectEx(connectSocket, (SOCKADDR*)&serverService, sizeof(serverService), nullptr, 0, &bytesTransferred, &connectEvent->overlapped))
-	{
-		if (WSAGetLastError() != ERROR_IO_PENDING)
-		{
-			printf("ConnectEx failed with error : %d\n", WSAGetLastError());
-			closesocket(connectSocket);
-			WSACleanup();
-			return 1;
-		}
-	}
+	DWORD sendLen = 0;
+	DWORD flags = 0;
 
-	// 비동기 연결 종료 시작
-	IocpEvent* disConnectEvent = new IocpEvent;
-	disConnectEvent->type = DISCONNECT;
-
-	if (!lpfnDisconnectEx(connectSocket, &disConnectEvent->overlapped, 0, 0))
-	{
-		if (WSAGetLastError() != ERROR_IO_PENDING)
-		{
-			printf("DisconnectEx failed with error : %d\n", WSAGetLastError());
-			closesocket(connectSocket);
-			WSACleanup();
-			return 1;
-		}
-	}
-
-	while (true)
-	{
-
-	}
+	//WSASend 호출
+	WSASend(connectSocket, &wsaBuf, 1, &sendLen, flags, &session->overlapped, NULL);
 
 	t.join();
 
 	closesocket(connectSocket);
 	WSACleanup();
 
-	return 0;
 }

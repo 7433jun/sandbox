@@ -1,19 +1,24 @@
 #pragma once
-//#include "CorePch.h"
+#include "IocpObj.h"
 
-class Listener
+class ServerService;
+class AcceptEvent;
+
+class Listener : public IocpObj
 {
 private:
+	ServerService* serverService = nullptr;
 	SOCKET socket = INVALID_SOCKET;
-
 public:
 	Listener() = default;
-	~Listener();
+	virtual ~Listener();
 public:
-	bool StartAccept(class Service* service);
-
-	void RegisterAccept(class IocpEvent* acceptEvent);
-
+	HANDLE GetHandle() override { return (HANDLE)socket; }
+	void ObserveIO(IocpEvent* iocpEvent, DWORD bytesTransferred) override;
+public:
+	bool StartAccept(ServerService* service);
+	void RegisterAccept(AcceptEvent* acceptEvent);
+	void ProcessAccept(AcceptEvent* acceptEvent);
 	void CloseSocket();
 };
 

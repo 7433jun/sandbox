@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "IocpCore.h"
 #include "IocpEvent.h"
+#include "Session.h"
+#include "IocpObj.h"
 
 IocpCore::IocpCore()
 {
@@ -12,27 +14,36 @@ IocpCore::~IocpCore()
 	CloseHandle(iocpHandle);
 }
 
-void IocpCore::Register(HANDLE socket, ULONG_PTR key)
+bool IocpCore::Register(IocpObj* iocpObj)
 {
-	CreateIoCompletionPort(socket, iocpHandle, key, 0);
+	return CreateIoCompletionPort(iocpObj->GetHandle(), iocpHandle, 0, 0);
 }
 
 bool IocpCore::ObserveIO(DWORD time)
 {
 	DWORD bytesTransferred = 0;
 	ULONG_PTR key = 0;
-	// Session으로 대체
-	//WSAOVERLAPPED overlapped = {};
 	IocpEvent* iocpEvent = nullptr;
 
 	printf("Waiting...\n");
 	if (GetQueuedCompletionStatus(iocpHandle, &bytesTransferred, &key, (LPOVERLAPPED*)&iocpEvent, time))
 	{
-		printf("Client Connected...\n");
+		// Session과 Listener는 IocpObj 상속받을거임
+		IocpObj* iocpObj = iocpEvent->iocpObj;
+		// iocpObj의 ObserveIO는 가상함수이기 때문에
+		// 할당된 자식이 Session이라면 Session->ObserveIO
+		// 할당된 자식이 Listener라면 Listener->ObserveIO
+		iocpObj->ObserveIO(iocpEvent, bytesTransferred);
 	}
 	else
 	{
-		printf("GetQueuedCompletionStatus function failed with error : %d\n", WSAGetLastError());
+		switch (GetLastError())
+		{
+		case WAIT_TIMEOUT:
+			return false;
+		default:
+			break;
+		}
 		return false;
 	}
 
