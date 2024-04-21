@@ -21,6 +21,20 @@ public:
 	void Init();
 };
 
+// ConnectEvent 추가
+class ConnectEvent : public IocpEvent
+{
+public:
+	ConnectEvent() : IocpEvent(EventType::CONNECT) {}
+};
+
+// DisconnectEvent 추가
+class DisconnectEvent : public IocpEvent
+{
+public:
+	DisconnectEvent() : IocpEvent(EventType::DISCONNECT) {}
+};
+
 class AcceptEvent : public IocpEvent
 {
 public:
@@ -33,4 +47,12 @@ class RecvEvent : public IocpEvent
 {
 public:
 	RecvEvent() : IocpEvent(EventType::RECV) {}
+};
+
+class SendEvent : public IocpEvent
+{
+public:
+	vector<BYTE> sendBuffer;
+public:
+	SendEvent() : IocpEvent(EventType::SEND) {}
 };

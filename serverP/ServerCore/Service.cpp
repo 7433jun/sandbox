@@ -32,10 +32,11 @@ Service::~Service()
 
 Session* Service::CreateSession()
 {
-	// session 만들어 주고
 	Session* session = sessionFactory();
 
-	// false이면 nullptr
+	// session 만들어질때 등록
+	session->SetService(this);
+
 	if (!iocpCore->Register(session))
 		return nullptr;
 

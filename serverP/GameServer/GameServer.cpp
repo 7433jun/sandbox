@@ -8,13 +8,28 @@ class ServerSession : public Session
 	{
 		cout << "On Connect 호출" << endl;
 	}
+
+	virtual int OnRecv(BYTE* buffer, int len) override
+	{
+		cout << "OnRecv : " << buffer << ", On Recv Len : " << len << endl;
+
+		// 받자마자 보내기
+		Send(buffer, len);
+
+		return len;
+	}
+
+	virtual void OnDisconnected() override
+	{
+		cout << "On DisConnected 호출" << endl;
+	}
+
 };
 
 int main()
 {
 	printf("==== SERVER ====\n");
 
-	// 람다를 매개변수로 넘겨줘서 SessionFactory에 등록
 	Service* service = new ServerService(L"127.0.0.1", 27015, []() {return new ServerSession; });
 
 	if (!service->Start())
