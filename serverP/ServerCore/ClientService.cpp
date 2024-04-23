@@ -9,6 +9,6 @@ ClientService::ClientService(wstring ip, uint16 port, SessionFactory factory) : 
 
 bool ClientService::Start()
 {
-	Session* session = CreateSession();
+	shared_ptr<Session> session = CreateSession();
 	return session->Connect();
 }

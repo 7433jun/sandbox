@@ -14,7 +14,7 @@ IocpCore::~IocpCore()
 	CloseHandle(iocpHandle);
 }
 
-bool IocpCore::Register(IocpObj* iocpObj)
+bool IocpCore::Register(shared_ptr<IocpObj> iocpObj)
 {
 	return CreateIoCompletionPort(iocpObj->GetHandle(), iocpHandle, 0, 0);
 }
@@ -28,11 +28,7 @@ bool IocpCore::ObserveIO(DWORD time)
 	printf("Waiting...\n");
 	if (GetQueuedCompletionStatus(iocpHandle, &bytesTransferred, &key, (LPOVERLAPPED*)&iocpEvent, time))
 	{
-		// Session과 Listener는 IocpObj 상속받을거임
-		IocpObj* iocpObj = iocpEvent->iocpObj;
-		// iocpObj의 ObserveIO는 가상함수이기 때문에
-		// 할당된 자식이 Session이라면 Session->ObserveIO
-		// 할당된 자식이 Listener라면 Listener->ObserveIO
+		shared_ptr<IocpObj> iocpObj = iocpEvent->iocpObj;
 		iocpObj->ObserveIO(iocpEvent, bytesTransferred);
 	}
 	else
@@ -42,6 +38,9 @@ bool IocpCore::ObserveIO(DWORD time)
 		case WAIT_TIMEOUT:
 			return false;
 		default:
+			// 추가
+			shared_ptr<IocpObj> iocpObj = iocpEvent->iocpObj;
+			iocpObj->ObserveIO(iocpEvent, bytesTransferred);
 			break;
 		}
 		return false;

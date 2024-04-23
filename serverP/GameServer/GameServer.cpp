@@ -4,6 +4,12 @@
 
 class ServerSession : public Session
 {
+public:
+	~ServerSession()
+	{
+		cout << "ServerSession Destroy" << endl;
+	}
+
 	virtual void OnConnected() override
 	{
 		cout << "On Connect 호출" << endl;
@@ -13,10 +19,13 @@ class ServerSession : public Session
 	{
 		cout << "OnRecv : " << buffer << ", On Recv Len : " << len << endl;
 
-		// 받자마자 보내기
 		Send(buffer, len);
-
 		return len;
+	}
+
+	virtual void OnSend(int len) override
+	{
+		cout << "OnSend Len : " << len << endl;
 	}
 
 	virtual void OnDisconnected() override
@@ -30,7 +39,7 @@ int main()
 {
 	printf("==== SERVER ====\n");
 
-	Service* service = new ServerService(L"127.0.0.1", 27015, []() {return new ServerSession; });
+	shared_ptr<Service> service = make_shared<ServerService>(L"127.0.0.1", 27015, []() {return make_shared<ServerSession>(); });
 
 	if (!service->Start())
 	{
@@ -48,8 +57,6 @@ int main()
 	);
 
 	t.join();
-
-	delete service;
 
 	return 0;
 }

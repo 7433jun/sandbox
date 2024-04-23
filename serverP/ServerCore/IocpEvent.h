@@ -10,11 +10,16 @@ enum class EventType : uint8
 
 };
 
+// 전방선언
+class IocpObj;
+class Session;
+
 class IocpEvent : public OVERLAPPED
 {
 public:
 	EventType eventType;
-	class IocpObj* iocpObj;
+	// 스마트 포인터로 전환
+	shared_ptr<IocpObj> iocpObj;
 public:
 	IocpEvent(EventType type);
 public:
@@ -38,7 +43,8 @@ public:
 class AcceptEvent : public IocpEvent
 {
 public:
-	class Session* session = nullptr;
+	// 스마트 포인터로 전환
+	shared_ptr<Session> session = nullptr;
 public:
 	AcceptEvent() : IocpEvent(EventType::ACCEPT) {}
 };

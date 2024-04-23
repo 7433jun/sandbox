@@ -10,13 +10,13 @@ class Session : public IocpObj
 private:
 	shared_mutex rwLock;
 	atomic<bool> isConnected = false;
-	Service* service = nullptr;
+	shared_ptr<Service> service = nullptr;
 	SOCKET socket = INVALID_SOCKET;
 	SOCKADDR_IN sockAddr = {};
 private:
-	// Connect 이벤트 추가
 	ConnectEvent connectEvent;
 	RecvEvent recvEvent;
+	DisconnectEvent disconnectEvent;
 public:
 	BYTE recvBuffer[1024] = {};
 public:
@@ -24,21 +24,25 @@ public:
 	virtual ~Session();
 public:
 	SOCKET GetSocket() const { return socket; }
-	HANDLE GetHandle() override { return (HANDLE)socket; }
-	Service* GetService() const { return service; }
+	HANDLE GetHandle() override { return (HANDLE)socket; };
+	shared_ptr<Service> GetService() const { return service; }
+	// 내 스마트 포인터용 주소 반환
+	shared_ptr<Session> GetSession() { return static_pointer_cast<Session>(shared_from_this()); }
+public:
 	bool IsConnected() const { return isConnected; }
 public:
 	void SetSockAddr(SOCKADDR_IN address) { sockAddr = address; }
-	void SetService(Service* _service) { service = _service; }
+	void SetService(shared_ptr<Service> _service) { service = _service; }
 private:
-	// Connect 등록
 	bool RegisterConnect();
 	void RegisterSend(SendEvent* sendEvent);
 	void RegisterRecv();
+	bool RegisterDisconnect();
 private:
 	void ProcessConnect();
 	void ProcessSend(SendEvent* sendEvent, int numOfBytes);
 	void ProcessRecv(int numOfBytes);
+	void ProcessDisConnect();
 private:
 	void HandleError(int errorCode);
 public:
@@ -47,7 +51,6 @@ public:
 	virtual int OnRecv(BYTE* buffer, int len) { return len; }
 	virtual void OnDisconnected() {}
 public:
-	// 연결 호출 할 함수
 	bool Connect();
 	void Send(BYTE* buffer, int len);
 	void Disconnect(const WCHAR* cause);

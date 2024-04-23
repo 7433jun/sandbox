@@ -1,7 +1,7 @@
 #pragma once
 #include "IocpEvent.h"
 
-class IocpObj
+class IocpObj : public enable_shared_from_this<IocpObj>
 {
 public:
 	virtual HANDLE GetHandle() abstract;

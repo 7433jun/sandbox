@@ -17,25 +17,22 @@ Service::Service(ServiceType type, wstring ip, uint16 port, SessionFactory facto
 	sockAddr.sin_addr = address;
 	sockAddr.sin_port = htons(port);
 
-	iocpCore = new IocpCore;
+	iocpCore = make_shared<IocpCore>();
+	sessionCount = 0;
 }
 
 Service::~Service()
 {
-	if (iocpCore != nullptr)
-	{
-		SocketHelper::CleanUp();
-		delete iocpCore;
-		iocpCore = nullptr;
-	}
+	// IocpCore 활용하는 애가 없음 알아서 해제
+	SocketHelper::CleanUp();
 }
 
-Session* Service::CreateSession()
+shared_ptr<Session> Service::CreateSession()
 {
-	Session* session = sessionFactory();
+	shared_ptr<Session> session = sessionFactory();
 
 	// session 만들어질때 등록
-	session->SetService(this);
+	session->SetService(shared_from_this());
 
 	if (!iocpCore->Register(session))
 		return nullptr;
@@ -43,14 +40,14 @@ Session* Service::CreateSession()
 	return session;
 }
 
-void Service::AddSession(Session* session)
+void Service::AddSession(shared_ptr<Session> session)
 {
 	unique_lock<shared_mutex> lock(rwLock);
 	sessionCount++;
 	sessions.insert(session);
 }
 
-void Service::RemoveSession(Session* session)
+void Service::RemoveSession(shared_ptr<Session> session)
 {
 	unique_lock<shared_mutex> lock(rwLock);
 	sessions.erase(session);

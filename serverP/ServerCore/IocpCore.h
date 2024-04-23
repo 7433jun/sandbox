@@ -1,4 +1,7 @@
 #pragma once
+
+class IocpObj;
+
 class IocpCore
 {
 private:
@@ -9,7 +12,8 @@ public:
 public:
 	HANDLE GetHandle() const { return iocpHandle; }
 public:
-	bool Register(class IocpObj* iocpObj);
+	// 스마트 포인터로 전환
+	bool Register(shared_ptr<IocpObj> iocpObj);
 	bool ObserveIO(DWORD time = INFINITE);
 };
 
