@@ -9,33 +9,62 @@ namespace Test
         {
             StringBuilder sb = new StringBuilder();
 
-            int T = int.Parse(Console.ReadLine());
-
-            for (int i = 0; i < T; i++)
+            while (true)
             {
-                int k = int.Parse(Console.ReadLine());
-                int n = int.Parse(Console.ReadLine());
+                StreamReader sr = new StreamReader(new BufferedStream(Console.OpenStandardInput()));
+                string str = sr.ReadLine();
 
-                sb.AppendLine($"{FuncClass.Function(k, n)}");
+                if (str == "")
+                {
+                    continue;
+                }
+
+                if (str == ".")
+                    break;
+
+                char[] array = str.ToArray();
+
+                Stack<char> balance = new Stack<char>();
+
+                foreach (char c in array)
+                {
+                    if (c == '(' || c == '[')
+                        balance.Push(c);
+
+                    if (c == ')')
+                    {
+                        if (balance.Count == 0)
+                        {
+                            balance.Push('x');
+                        }
+
+                        if (balance.Peek() == '(')
+                            balance.Pop();
+                    }
+
+                    if (c == ']')
+                    {
+                        if (balance.Count == 0)
+                        {
+                            balance.Push('x');
+                        }
+
+                        if (balance.Peek() == '[')
+                            balance.Pop();
+                    }
+                }
+
+                if (balance.Count == 0)
+                {
+                    sb.AppendLine("yes");
+                }
+                else
+                {
+                    sb.AppendLine("no");
+                }
             }
 
             Console.WriteLine(sb);
         }
     }
-
-    public class FuncClass
-    {
-        static public int Function(int k, int n)
-        {
-            if (k == 0)
-                return n;
-
-            if (n == 1)
-                return 1;
-
-            return Function(k - 1, n) + Function(k, n - 1);
-        }
-    }
-
-
 }

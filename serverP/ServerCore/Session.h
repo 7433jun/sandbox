@@ -1,11 +1,14 @@
 #pragma once
 #include "IocpObj.h"
+#include "RecvBuffer.h"
+#include "SendBuffer.h"
 
 class Service;
 
 class Session : public IocpObj
 {
 	friend class Listener;
+	enum { BUFFER_SIZE = 0x10000 };
 
 private:
 	shared_mutex rwLock;
@@ -15,10 +18,13 @@ private:
 	SOCKADDR_IN sockAddr = {};
 private:
 	ConnectEvent connectEvent;
+	SendEvent sendEvent;
 	RecvEvent recvEvent;
 	DisconnectEvent disconnectEvent;
 public:
-	BYTE recvBuffer[1024] = {};
+	queue<shared_ptr<SendBuffer>> sendQueue;
+	atomic<bool> sendRegistered = false;
+	RecvBuffer recvBuffer;
 public:
 	Session();
 	virtual ~Session();
@@ -26,7 +32,6 @@ public:
 	SOCKET GetSocket() const { return socket; }
 	HANDLE GetHandle() override { return (HANDLE)socket; };
 	shared_ptr<Service> GetService() const { return service; }
-	// 내 스마트 포인터용 주소 반환
 	shared_ptr<Session> GetSession() { return static_pointer_cast<Session>(shared_from_this()); }
 public:
 	bool IsConnected() const { return isConnected; }
@@ -35,12 +40,12 @@ public:
 	void SetService(shared_ptr<Service> _service) { service = _service; }
 private:
 	bool RegisterConnect();
-	void RegisterSend(SendEvent* sendEvent);
+	void RegisterSend();
 	void RegisterRecv();
 	bool RegisterDisconnect();
 private:
 	void ProcessConnect();
-	void ProcessSend(SendEvent* sendEvent, int numOfBytes);
+	void ProcessSend(int numOfBytes);
 	void ProcessRecv(int numOfBytes);
 	void ProcessDisConnect();
 private:
@@ -52,7 +57,7 @@ public:
 	virtual void OnDisconnected() {}
 public:
 	bool Connect();
-	void Send(BYTE* buffer, int len);
+	void Send(shared_ptr<SendBuffer> sendBuffer);
 	void Disconnect(const WCHAR* cause);
 public:
 	void ObserveIO(IocpEvent* iocpEvent, DWORD bytesTransferred) override;

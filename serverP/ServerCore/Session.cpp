@@ -3,7 +3,7 @@
 #include "SocketHelper.h"
 #include "Service.h"
 
-Session::Session()
+Session::Session() : recvBuffer(BUFFER_SIZE)
 {
 	socket = SocketHelper::CreateSocket();
 }
@@ -18,18 +18,32 @@ bool Session::Connect()
 	return RegisterConnect();
 }
 
-void Session::Send(BYTE* buffer, int len)
+void Session::Send(shared_ptr<SendBuffer> sendData)
 {
-	SendEvent* sendEvent = new SendEvent();
+	// 연결 안되어 있음 return
+	if (!IsConnected())
+		return;
 
-	sendEvent->iocpObj = shared_from_this();
+	// 모든 스레드들의 기본값
+	bool registerSend = false;
 
-	sendEvent->sendBuffer.resize(len);
+	{
+		// Lock을 잡고
+		unique_lock<shared_mutex> lock(rwLock);
+		// 경합해서 이긴애가 push
+		sendQueue.push(sendData);
+		// 최초의 sendRegistered 값을 바꾸는 애 하나만
+		if (sendRegistered.exchange(true) == false)
+		{
+			// registerSend를 true 할수 있음
+			registerSend = true;
+		}
+	}// Lock 풀림
 
-	memcpy(sendEvent->sendBuffer.data(), buffer, len);
-
-	unique_lock<shared_mutex> lock(rwLock);
-	RegisterSend(sendEvent);
+	if (registerSend)
+	{
+		RegisterSend();
+	}
 }
 
 void Session::Disconnect(const WCHAR* cause)
@@ -51,6 +65,9 @@ bool Session::RegisterConnect()
 		return false;
 
 	if (GetService()->GetServiceType() != ServiceType::CLIENT)
+		return false;
+
+	if (!SocketHelper::SetReuseAddress(socket, true))
 		return false;
 
 	if (SocketHelper::BindAny(socket, 0) == false)
@@ -84,8 +101,8 @@ void Session::RegisterRecv()
 	recvEvent.iocpObj = shared_from_this();
 
 	WSABUF wsaBuf;
-	wsaBuf.buf = (char*)recvBuffer;
-	wsaBuf.len = sizeof(recvBuffer);
+	wsaBuf.buf = (char*)recvBuffer.WritePos();
+	wsaBuf.len = recvBuffer.FreeSize();
 
 	DWORD recvLen = 0;
 	DWORD flags = 0;
@@ -103,26 +120,61 @@ void Session::RegisterRecv()
 
 }
 
-void Session::RegisterSend(SendEvent* sendEvent)
+void Session::RegisterSend()
 {
 	if (!IsConnected())
 		return;
 
-	WSABUF wsaBuf;
-	wsaBuf.buf = (char*)sendEvent->sendBuffer.data();
-	wsaBuf.len = sendEvent->sendBuffer.size();
+	// SendEvent 초기화
+	sendEvent.Init();
+	// sendEvent의 iocp를 session으로
+	sendEvent.iocpObj = shared_from_this();
+
+	int writeSize = 0;
+	// sendQueue의 데이터가 남아 있지 않을때까지 돌림
+	while (!sendQueue.empty())
+	{
+		// sendQueue의 앞부분부터 pop시키기 위해서 앞부분 데이터 캐싱
+		shared_ptr<SendBuffer> sendBuffer = sendQueue.front();
+		// 얼마나 사용했는지 크기 추가
+		writeSize += sendBuffer->WriteSize();
+		// 앞부분 날림
+		sendQueue.pop();
+		// SendEvent에 sendQueue에 들어 있는 값들을 밀어 넣음
+		sendEvent.sendBuffers.push_back(sendBuffer);
+	}
+
+	// 한꺼번에 데이터를 보내기 위해
+	vector<WSABUF> wsaBufs;
+
+	// SendEvent의 sendBuffers크기 만큼 공간 예약
+	wsaBufs.reserve(sendEvent.sendBuffers.size());
+
+	// SendEvent의 sendBuffers 순회하면서 등록
+	for (auto sendBuffer : sendEvent.sendBuffers)
+	{
+		WSABUF wsaBuf;
+		wsaBuf.buf = (char*)sendBuffer->GetBuffer();
+		wsaBuf.len = sendBuffer->WriteSize();
+		wsaBufs.push_back(wsaBuf);
+	}
 
 	DWORD recvLen = 0;
 	DWORD flags = 0;
 
-	if (WSASend(socket, &wsaBuf, 1, &recvLen, flags, sendEvent, nullptr) == SOCKET_ERROR)
+	// 한꺼번에 여러개 보내기
+	if (WSASend(socket, wsaBufs.data(), (DWORD)wsaBufs.size(), &recvLen, flags, &sendEvent, nullptr) == SOCKET_ERROR)
 	{
 		int errorCode = WSAGetLastError();
 		if (errorCode != WSA_IO_PENDING)
 		{
 			HandleError(errorCode);
-			sendEvent->iocpObj = nullptr;
-			delete sendEvent;
+			// Session에 있으니까
+			sendEvent.iocpObj = nullptr;
+			// SendEvent의 sendBuffers 깨끗이
+			sendEvent.sendBuffers.clear();
+			// sendRegistered 상태를 false
+			sendRegistered.store(false);
 		}
 	}
 }
@@ -157,7 +209,8 @@ void Session::ObserveIO(IocpEvent* iocpEvent, DWORD bytesTransferred)
 		ProcessRecv(bytesTransferred);
 		break;
 	case EventType::SEND:
-		ProcessSend((SendEvent*)iocpEvent, bytesTransferred);
+		// 보낼 크기만 보내기
+		ProcessSend(bytesTransferred);
 		break;
 	case EventType::DISCONNECT:
 		ProcessDisConnect();
@@ -180,6 +233,29 @@ void Session::ProcessConnect()
 	RegisterRecv();
 }
 
+void Session::ProcessSend(int numOfBytes)
+{
+	// null로 밀고
+	sendEvent.iocpObj = nullptr;
+	// SendEvent의 sendBuffers 깨끗이
+	sendEvent.sendBuffers.clear();
+
+	if (numOfBytes == 0)
+	{
+		Disconnect(L"Send 0 bytes");
+	}
+
+	OnSend(numOfBytes);
+
+	unique_lock<shared_mutex> lock(rwLock);
+	if (sendQueue.empty())
+		// sendRegistered 상태를 false
+		sendRegistered.store(false);
+	else
+		// RegisterSend를 한번 더 실행
+		RegisterSend();
+}
+
 void Session::ProcessRecv(int numOfBytes)
 {
 	recvEvent.iocpObj = nullptr;
@@ -190,25 +266,24 @@ void Session::ProcessRecv(int numOfBytes)
 		return;
 	}
 
-	OnRecv(recvBuffer, numOfBytes);
+	if (recvBuffer.OnWrite(numOfBytes) == false)
+	{
+		Disconnect(L"On write overflow");
+		return;
+	}
+
+	int dataSize = recvBuffer.DataSize();
+
+	int processLen = OnRecv(recvBuffer.ReadPos(), numOfBytes);
+	if (processLen < 0 || dataSize < processLen || recvBuffer.OnRead(processLen) == false)
+	{
+		Disconnect(L"On read overflow");
+		return;
+	}
+
+	recvBuffer.Clear();
 
 	RegisterRecv();
-}
-
-void Session::ProcessSend(SendEvent* sendEvent, int numOfBytes)
-{
-	sendEvent->iocpObj = nullptr;
-	if (sendEvent != nullptr)
-	{
-		delete sendEvent;
-	}
-
-	if (numOfBytes == 0)
-	{
-		Disconnect(L"Send 0 bytes");
-	}
-
-	OnSend(numOfBytes);
 }
 
 void Session::ProcessDisConnect()

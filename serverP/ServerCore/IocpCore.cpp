@@ -25,7 +25,6 @@ bool IocpCore::ObserveIO(DWORD time)
 	ULONG_PTR key = 0;
 	IocpEvent* iocpEvent = nullptr;
 
-	printf("Waiting...\n");
 	if (GetQueuedCompletionStatus(iocpHandle, &bytesTransferred, &key, (LPOVERLAPPED*)&iocpEvent, time))
 	{
 		shared_ptr<IocpObj> iocpObj = iocpEvent->iocpObj;
